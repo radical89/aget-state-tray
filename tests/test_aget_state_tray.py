@@ -6,7 +6,7 @@ import pytest
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from aget_state_tray import parse_vram, read_vram, make_icon, COLOR_RUNNING, COLOR_STOPPED
+from aget_state_tray import parse_vram, read_vram, make_icon, COLOR_RUNNING, COLOR_STOPPED, toggle_server, get_active_state
 
 
 @pytest.fixture(scope="module")
@@ -75,3 +75,42 @@ def test_make_icon_no_label_returns_qicon(qapp):
     icon = make_icon(COLOR_RUNNING)
     assert isinstance(icon, QIcon)
     assert not icon.isNull()
+
+
+def test_toggle_server_stop_when_running():
+    with patch("aget_state_tray.subprocess.Popen") as mock_popen:
+        toggle_server(is_running=True)
+    mock_popen.assert_called_once_with(
+        ["systemctl", "--user", "stop", "llama-server"]
+    )
+
+
+def test_toggle_server_start_when_stopped():
+    with patch("aget_state_tray.subprocess.Popen") as mock_popen:
+        toggle_server(is_running=False)
+    mock_popen.assert_called_once_with(
+        ["systemctl", "--user", "start", "llama-server"]
+    )
+
+
+def test_get_active_state_returns_string(qapp):
+    from PyQt6.QtDBus import QDBusConnection, QDBusMessage
+    mock_iface = MagicMock()
+    mock_reply = MagicMock()
+    mock_reply.type.return_value = QDBusMessage.MessageType.ReplyMessage
+    mock_reply.arguments.return_value = ["active"]
+    mock_iface.call.return_value = mock_reply
+    with patch("aget_state_tray.QDBusInterface", return_value=mock_iface):
+        result = get_active_state(QDBusConnection.sessionBus())
+    assert result == "active"
+
+
+def test_get_active_state_dbus_error_returns_inactive(qapp):
+    from PyQt6.QtDBus import QDBusConnection, QDBusMessage
+    mock_iface = MagicMock()
+    mock_reply = MagicMock()
+    mock_reply.type.return_value = QDBusMessage.MessageType.ErrorMessage
+    mock_iface.call.return_value = mock_reply
+    with patch("aget_state_tray.QDBusInterface", return_value=mock_iface):
+        result = get_active_state(QDBusConnection.sessionBus())
+    assert result == "inactive"

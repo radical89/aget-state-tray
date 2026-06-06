@@ -76,6 +76,25 @@ def make_icon(color: QColor, top: str = "", bottom: str = "") -> QIcon:
     return QIcon(pixmap)
 
 
+def toggle_server(is_running: bool) -> None:
+    """Start or stop llama-server.service via systemctl --user."""
+    action = "stop" if is_running else "start"
+    subprocess.Popen(["systemctl", "--user", action, "llama-server"])
+
+
+def get_active_state(bus: QDBusConnection) -> str:
+    """Read the current ActiveState of llama-server.service from systemd D-Bus.
+    Returns 'active', 'inactive', 'activating', 'deactivating', or 'inactive' on error."""
+    iface = QDBusInterface(UNIT_SERVICE, UNIT_PATH, PROPS_IFACE, bus)
+    reply = iface.call("Get", UNIT_IFACE, "ActiveState")
+    if reply.type() == QDBusMessage.MessageType.ReplyMessage:
+        args = reply.arguments()
+        if args:
+            val = args[0]
+            return str(val.variant()) if hasattr(val, "variant") else str(val)
+    return "inactive"
+
+
 def main() -> None:
     pass
 
