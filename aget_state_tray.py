@@ -4,7 +4,7 @@
 import subprocess
 import sys
 
-from PyQt6.QtCore import Qt, QRect, QTimer
+from PyQt6.QtCore import Qt, QObject, QRect, QTimer, pyqtSlot
 from PyQt6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PyQt6.QtGui import QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
@@ -95,8 +95,73 @@ def get_active_state(bus: QDBusConnection) -> str:
     return "inactive"
 
 
+class AgetStateTray(QObject):
+    def __init__(self) -> None:
+        super().__init__()
+        self.app = QApplication.instance() or QApplication(sys.argv)
+        self.app.setQuitOnLastWindowClosed(False)
+        self._is_running = False
+
+        self.tray = QSystemTrayIcon()
+        menu = QMenu()
+        menu.addAction("Quit", self.app.quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(self._on_activated)
+        self.tray.show()
+
+        self.vram_timer = QTimer()
+        self.vram_timer.setInterval(VRAM_POLL_MS)
+        self.vram_timer.timeout.connect(self._update_vram)
+
+        bus = QDBusConnection.sessionBus()
+        bus.connect(
+            UNIT_SERVICE, UNIT_PATH, PROPS_IFACE,
+            "PropertiesChanged", self._on_properties_changed,
+        )
+        self._apply_state(get_active_state(bus) == "active")
+
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            toggle_server(self._is_running)
+
+    @pyqtSlot("QString", "QVariantMap", "QStringList")
+    def _on_properties_changed(self, *args) -> None:
+        # Re-read authoritative state rather than parsing the variant dict.
+        # Fires only on actual systemd transitions — not a polling call.
+        state = get_active_state(QDBusConnection.sessionBus())
+        self._apply_state(state == "active")
+
+    def _apply_state(self, is_running: bool) -> None:
+        self._is_running = is_running
+        if is_running:
+            self.tray.setIcon(make_icon(COLOR_RUNNING, "AI", "..."))
+            self.tray.setToolTip("llama-server · reading VRAM…")
+            self._update_vram()
+            self.vram_timer.start()
+        else:
+            self.vram_timer.stop()
+            self.tray.setIcon(make_icon(COLOR_STOPPED, "AI"))
+            self.tray.setToolTip("llama-server · stopped — click to start")
+
+    def _update_vram(self) -> None:
+        vram = read_vram()
+        if vram:
+            used, total = vram
+            self.tray.setIcon(make_icon(COLOR_RUNNING, "AI", f"{used:.0f}G"))
+            self.tray.setToolTip(
+                f"llama-server · {used:.1f} GB / {total:.1f} GB VRAM — click to stop"
+            )
+        else:
+            self.tray.setIcon(make_icon(COLOR_RUNNING, "AI"))
+            self.tray.setToolTip("llama-server · running — click to stop")
+
+    def run(self) -> int:
+        return self.app.exec()
+
+
 def main() -> None:
-    pass
+    tray = AgetStateTray()
+    sys.exit(tray.run())
 
 
 if __name__ == "__main__":

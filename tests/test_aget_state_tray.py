@@ -6,7 +6,7 @@ import pytest
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from aget_state_tray import parse_vram, read_vram, make_icon, COLOR_RUNNING, COLOR_STOPPED, toggle_server, get_active_state
+from aget_state_tray import parse_vram, read_vram, make_icon, COLOR_RUNNING, COLOR_STOPPED, toggle_server, get_active_state, AgetStateTray
 
 
 @pytest.fixture(scope="module")
@@ -114,3 +114,22 @@ def test_get_active_state_dbus_error_returns_inactive(qapp):
     with patch("aget_state_tray.QDBusInterface", return_value=mock_iface):
         result = get_active_state(QDBusConnection.sessionBus())
     assert result == "inactive"
+
+
+def test_apply_state_running_starts_timer(qapp):
+    with patch("aget_state_tray.get_active_state", return_value="inactive"), \
+         patch("aget_state_tray.QDBusConnection"):
+        tray = AgetStateTray()
+    with patch("aget_state_tray.read_vram", return_value=(14.3, 15.9)):
+        tray._apply_state(True)
+    assert tray.vram_timer.isActive()
+    tray.app.quit()
+
+
+def test_apply_state_stopped_stops_timer(qapp):
+    with patch("aget_state_tray.get_active_state", return_value="inactive"), \
+         patch("aget_state_tray.QDBusConnection"):
+        tray = AgetStateTray()
+    tray._apply_state(False)
+    assert not tray.vram_timer.isActive()
+    tray.app.quit()
