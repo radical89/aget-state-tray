@@ -20,6 +20,23 @@ COLOR_STOPPED = QColor("#888888")
 VRAM_POLL_MS = 5_000
 
 
+def parse_vram(output: str) -> tuple[float, float] | None:
+    """Parse nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits output.
+    Returns (used_gb, total_gb) or None on any failure."""
+    try:
+        line = output.strip().splitlines()[0] if output.strip() else ""
+        if not line:
+            return None
+        parts = line.split(",")
+        if len(parts) != 2:
+            return None
+        used = float(parts[0].strip())
+        total = float(parts[1].strip())
+        return used / 1024, total / 1024
+    except (ValueError, IndexError):
+        return None
+
+
 def main() -> None:
     pass
 
