@@ -37,6 +37,19 @@ def parse_vram(output: str) -> tuple[float, float] | None:
         return None
 
 
+def read_vram() -> tuple[float, float] | None:
+    """Query nvidia-smi for VRAM usage. Returns (used_gb, total_gb) or None."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2,
+        )
+        return parse_vram(result.stdout)
+    except (subprocess.SubprocessError, OSError):
+        return None
+
+
 def main() -> None:
     pass
 
