@@ -6,7 +6,7 @@ import pytest
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
-from aget_state_tray import parse_vram, read_vram
+from aget_state_tray import parse_vram, read_vram, make_icon, COLOR_RUNNING, COLOR_STOPPED
 
 
 @pytest.fixture(scope="module")
@@ -57,3 +57,21 @@ def test_read_vram_timeout_returns_none():
     with patch("aget_state_tray.subprocess.run",
                side_effect=subprocess.TimeoutExpired("nvidia-smi", 2)):
         assert read_vram() is None
+
+
+def test_make_icon_stopped_returns_qicon(qapp):
+    icon = make_icon(COLOR_STOPPED, "AI")
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+
+
+def test_make_icon_running_two_line_returns_qicon(qapp):
+    icon = make_icon(COLOR_RUNNING, "AI", "14G")
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+
+
+def test_make_icon_no_label_returns_qicon(qapp):
+    icon = make_icon(COLOR_RUNNING)
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()

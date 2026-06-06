@@ -50,6 +50,32 @@ def read_vram() -> tuple[float, float] | None:
         return None
 
 
+def make_icon(color: QColor, top: str = "", bottom: str = "") -> QIcon:
+    """Draw a 22×22 rounded-rect icon with optional two-line centred white label."""
+    pixmap = QPixmap(ICON_SIZE, ICON_SIZE)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setBrush(color)
+    painter.setPen(QColor(0, 0, 0, 60))
+    painter.drawRoundedRect(1, 1, ICON_SIZE - 2, ICON_SIZE - 2, 4, 4)
+    if top or bottom:
+        painter.setPen(QColor("white"))
+        font = QFont()
+        font.setPixelSize(7)
+        font.setBold(True)
+        painter.setFont(font)
+        if top and bottom:
+            painter.drawText(QRect(0, 2, ICON_SIZE, 10),
+                             Qt.AlignmentFlag.AlignHCenter, top)
+            painter.drawText(QRect(0, 11, ICON_SIZE, 10),
+                             Qt.AlignmentFlag.AlignHCenter, bottom)
+        else:
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, top or bottom)
+    painter.end()
+    return QIcon(pixmap)
+
+
 def main() -> None:
     pass
 
