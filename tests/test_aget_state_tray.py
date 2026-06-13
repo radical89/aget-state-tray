@@ -157,3 +157,35 @@ def test_write_env_creates_dir_and_file(tmp_path):
 
 def test_current_model_missing_file_returns_empty(tmp_path):
     assert current_model(tmp_path / "absent.env") == ""
+
+
+from aget_state_tray import parse_vram, read_vram
+
+
+def test_parse_vram_valid():
+    used, total = parse_vram("14634, 16303\n")
+    assert used == pytest.approx(14634 / 1024, rel=1e-3)
+    assert total == pytest.approx(16303 / 1024, rel=1e-3)
+
+
+@pytest.mark.parametrize("text", ["", "[N/A], [N/A]\n", "not a number\n", "14634\n"])
+def test_parse_vram_bad_returns_none(text):
+    assert parse_vram(text) is None
+
+
+def test_read_vram_returns_tuple():
+    mock = MagicMock()
+    mock.stdout = "14634, 16303\n"
+    with patch("aget_state_tray.subprocess.run", return_value=mock):
+        assert read_vram() is not None
+
+
+def test_read_vram_smi_missing_returns_none():
+    with patch("aget_state_tray.subprocess.run", side_effect=FileNotFoundError):
+        assert read_vram() is None
+
+
+def test_read_vram_timeout_returns_none():
+    with patch("aget_state_tray.subprocess.run",
+               side_effect=subprocess.TimeoutExpired("nvidia-smi", 2)):
+        assert read_vram() is None

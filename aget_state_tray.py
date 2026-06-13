@@ -157,3 +157,32 @@ def current_model(path: Path) -> str:
         return model
     except OSError:
         return ""
+
+
+def parse_vram(output: str) -> tuple[float, float] | None:
+    """Parse 'used, total' (MiB) from nvidia-smi CSV; return (used_gb, total_gb)."""
+    try:
+        line = output.strip().splitlines()[0] if output.strip() else ""
+        if not line:
+            return None
+        parts = line.split(",")
+        if len(parts) != 2:
+            return None
+        used = float(parts[0].strip())
+        total = float(parts[1].strip())
+        return used / 1024, total / 1024
+    except ValueError:
+        return None
+
+
+def read_vram() -> tuple[float, float] | None:
+    """Query nvidia-smi for VRAM usage. Returns (used_gb, total_gb) or None."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=2,
+        )
+        return parse_vram(result.stdout)
+    except (subprocess.SubprocessError, OSError):
+        return None
