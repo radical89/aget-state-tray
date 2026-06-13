@@ -108,6 +108,20 @@ def test_load_config_malformed_returns_default(tmp_path):
     assert cfg.default_args == ""
 
 
+def test_load_config_wrong_types_return_default(tmp_path):
+    # Valid TOML, wrong shapes: must fall back rather than crash on startup.
+    f = tmp_path / "wrong.toml"
+    f.write_text('models_dir = 42\ndefaults = "not a table"\n')
+    cfg = load_config(f)
+    assert cfg.models_dir == Path(os.path.expanduser("~/models"))
+    assert cfg.default_args == ""
+
+
+def test_compose_args_empty_defaults_and_extras_returns_empty(tmp_path):
+    cfg = Config(models_dir=tmp_path)
+    assert compose_args(cfg, "x.gguf") == ""
+
+
 def test_compose_args_appends_per_model_to_defaults(tmp_path):
     f = tmp_path / "models.toml"
     f.write_text(SAMPLE_TOML)

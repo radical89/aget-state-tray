@@ -98,26 +98,26 @@ def load_config(path: Path) -> Config:
     fallback = Config(models_dir=Path(os.path.expanduser("~/models")))
     try:
         data = tomllib.loads(path.read_text())
-    except (OSError, tomllib.TOMLDecodeError) as exc:
+        models_dir = Path(os.path.expanduser(data.get("models_dir", "~/models")))
+        default_args = data.get("defaults", {}).get("args", "")
+        model_args: dict[str, str] = {}
+        model_names: dict[str, str] = {}
+        for rel, entry in data.get("models", {}).items():
+            if isinstance(entry, dict):
+                if "args" in entry:
+                    model_args[rel] = entry["args"]
+                if "name" in entry:
+                    model_names[rel] = entry["name"]
+    except (OSError, tomllib.TOMLDecodeError, TypeError, AttributeError) as exc:
         print(f"aget-state-tray: cannot read {path}: {exc}", file=sys.stderr)
         return fallback
-    models_dir = Path(os.path.expanduser(data.get("models_dir", "~/models")))
-    default_args = data.get("defaults", {}).get("args", "")
-    model_args: dict[str, str] = {}
-    model_names: dict[str, str] = {}
-    for rel, entry in data.get("models", {}).items():
-        if isinstance(entry, dict):
-            if "args" in entry:
-                model_args[rel] = entry["args"]
-            if "name" in entry:
-                model_names[rel] = entry["name"]
     return Config(models_dir, default_args, model_args, model_names)
 
 
 def compose_args(config: Config, rel_path: str) -> str:
     """Full llama-server arg string: defaults followed by per-model extras."""
     extra = config.model_args.get(rel_path, "")
-    return f"{config.default_args} {extra}".strip()
+    return " ".join(p for p in (config.default_args.strip(), extra.strip()) if p)
 
 
 def display_name(config: Config, rel_path: str) -> str:
