@@ -230,7 +230,7 @@ def test_make_icon_no_label(qapp):
     assert not make_icon(VisualState.RUNNING).isNull()
 
 
-from aget_state_tray import get_unit_state, systemctl_run, Tray
+from aget_state_tray import get_unit_state, systemctl_run, Tray, CURRENT_ENV
 
 
 def test_get_unit_state_reads_active_and_sub(qapp):
@@ -308,5 +308,59 @@ def test_tray_click_transition_ignored(qapp):
     with patch("aget_state_tray.get_unit_state", return_value=("activating", "start")), \
          patch("aget_state_tray.systemctl_run") as run:
         tray._on_activated(QSystemTrayIcon.ActivationReason.Trigger)
+    run.assert_not_called()
+    tray.app.quit()
+
+
+def test_rebuild_menu_lists_models_checks_current(qapp, tmp_path):
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path)
+    (tmp_path / "a.gguf").touch()
+    (tmp_path / "b.gguf").touch()
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("inactive", "dead")), \
+         patch("aget_state_tray.current_model", return_value=str(tmp_path / "b.gguf")):
+        tray._rebuild_menu()
+    labels = [a.text() for a in tray.menu.actions() if a.isCheckable()]
+    assert labels == ["a", "b"]
+    checked = [a.text() for a in tray.menu.actions() if a.isCheckable() and a.isChecked()]
+    assert checked == ["b"]
+    tray.app.quit()
+
+
+def test_rebuild_menu_empty_shows_disabled_entry(qapp, tmp_path):
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path / "empty")
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("inactive", "dead")), \
+         patch("aget_state_tray.current_model", return_value=""):
+        tray._rebuild_menu()
+    texts = [a.text() for a in tray.menu.actions()]
+    assert any("No models found" in t for t in texts)
+    tray.app.quit()
+
+
+def test_select_model_writes_env_and_restarts_when_running(qapp, tmp_path):
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path, default_args="--port 8080")
+    (tmp_path / "m.gguf").touch()
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("active", "running")), \
+         patch("aget_state_tray.write_env") as wenv, \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._select_model("m.gguf")
+    wenv.assert_called_once_with(CURRENT_ENV, str(tmp_path / "m.gguf"), "--port 8080")
+    run.assert_called_once_with("restart")
+    tray.app.quit()
+
+
+def test_select_model_stopped_writes_env_no_restart(qapp, tmp_path):
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path)
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("inactive", "dead")), \
+         patch("aget_state_tray.write_env"), \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._select_model("m.gguf")
     run.assert_not_called()
     tray.app.quit()

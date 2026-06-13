@@ -368,8 +368,63 @@ class Tray(QObject):
             self.tray.setIcon(make_icon(VisualState.RUNNING, "AI"))
             self.tray.setToolTip(f"llama-server · {name} · running — click to stop")
 
+    def _menu_title(self, config: Config, active: str, sub: str) -> str:
+        state = map_state(active, sub)
+        if state != VisualState.RUNNING:
+            return _STATE_TOOLTIP.get(state, "llama-server")
+        name = self._current_display_name()
+        vram = read_vram()
+        if vram:
+            used, total = vram
+            return f"llama-server · {name} · {used:.1f} / {total:.1f} GB"
+        return f"llama-server · {name} · running"
+
     def _rebuild_menu(self) -> None:
-        pass  # implemented in Task 10
+        self.menu.clear()
+        config = load_config(MODELS_TOML)
+        active, sub = get_unit_state(self.bus)
+
+        title = self.menu.addAction(self._menu_title(config, active, sub))
+        title.setEnabled(False)
+        self.menu.addSeparator()
+
+        models = discover_models(config.models_dir)
+        current_abs = current_model(CURRENT_ENV)
+        current_rel = _relative_to(config.models_dir, current_abs) if current_abs else ""
+        if models:
+            group = QActionGroup(self.menu)
+            group.setExclusive(True)
+            for rel in models:
+                act = self.menu.addAction(display_name(config, rel))
+                act.setCheckable(True)
+                act.setChecked(rel == current_rel)
+                act.setActionGroup(group)
+                act.triggered.connect(lambda _checked, r=rel: self._select_model(r))
+        else:
+            empty = self.menu.addAction("No models found (check models.toml)")
+            empty.setEnabled(False)
+        self.menu.addSeparator()
+
+        if click_verb(active, sub) == "stop" or map_state(active, sub) == VisualState.RUNNING:
+            self.menu.addAction("Stop server", lambda: systemctl_run("stop"))
+        else:
+            self.menu.addAction("Start server", lambda: systemctl_run("start"))
+        self.menu.addAction("Quit", self.app.quit)
 
     def _select_model(self, rel: str) -> None:
-        pass  # implemented in Task 10
+        config = load_config(MODELS_TOML)
+        model_abs = str(config.models_dir / rel)
+        write_env(CURRENT_ENV, model_abs, compose_args(config, rel))
+        active, sub = get_unit_state(self.bus)
+        state = map_state(active, sub)
+        if state == VisualState.RUNNING or (state == VisualState.FAILED and sub == "auto-restart"):
+            systemctl_run("restart")
+
+
+def main() -> None:
+    tray = Tray()
+    sys.exit(tray.app.exec())
+
+
+if __name__ == "__main__":
+    main()
