@@ -3,8 +3,8 @@ Description=llama.cpp server
 After=network.target
 
 [Service]
-EnvironmentFile=%h/.config/llama-server/current.env
-ExecStart=/home/karlos/llama-mtp/build/bin/llama-server --model ${LLAMA_MODEL} $LLAMA_ARGS
+EnvironmentFile=-%h/.config/llama-server/current.env
+ExecStart=%h/llama-mtp/build/bin/llama-server --model ${LLAMA_MODEL} $LLAMA_ARGS
 Restart=on-failure
 RestartSec=10
 

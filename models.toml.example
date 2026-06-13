@@ -9,6 +9,8 @@ args = "--spec-type draft-mtp --spec-draft-n-max 5"
 [models."qwopus-9b-mtp/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf"]
 args = "--spec-type draft-mtp --spec-draft-n-max 5"
 
+# Per-model args are passed to llama-server verbatim with no shell, so paths here
+# must be absolute: ~ and $HOME are not expanded. Edit this path for your machine.
 [models."gemma-4-12b/gemma-4-12b-it-UD-Q4_K_XL.gguf"]
 args = "--mmproj /home/karlos/models/gemma-4-12b/mmproj-BF16.gguf"
 name = "Gemma 4 12B (vision)"
