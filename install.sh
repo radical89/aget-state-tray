@@ -24,8 +24,21 @@ if [ ! -f "$LLAMA_CONF_DIR/models.toml" ]; then
     install -m 644 "$SCRIPT_DIR/models.toml.example" "$LLAMA_CONF_DIR/models.toml"
 fi
 if [ ! -f "$LLAMA_CONF_DIR/current.env" ]; then
-    printf 'LLAMA_MODEL=%s/models/%s\nLLAMA_ARGS=\n' "$HOME" "$GEMMA_REL" \
-        > "$LLAMA_CONF_DIR/current.env"
+    # Compose the seed from models.toml (defaults + the gemma entry's args) so the
+    # very first start, before the user opens the picker, already runs with the full
+    # flag set rather than CPU-only defaults. Mirrors compose_args(); stdlib only.
+    python3 - "$LLAMA_CONF_DIR/models.toml" "$GEMMA_REL" \
+        > "$LLAMA_CONF_DIR/current.env" <<'PY'
+import os, sys, tomllib
+toml_path, rel = sys.argv[1], sys.argv[2]
+data = tomllib.loads(open(toml_path).read())
+models_dir = os.path.expanduser(data.get("models_dir", "~/models"))
+defaults = data.get("defaults", {}).get("args", "")
+extra = data.get("models", {}).get(rel, {}).get("args", "")
+args = " ".join(p for p in (defaults.strip(), extra.strip()) if p)
+print(f"LLAMA_MODEL={os.path.join(models_dir, rel)}")
+print(f"LLAMA_ARGS={args}")
+PY
 fi
 
 # Back up any existing llama-server.service before overwriting.
