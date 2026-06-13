@@ -228,3 +228,85 @@ def test_make_icon_single_line(qapp):
 
 def test_make_icon_no_label(qapp):
     assert not make_icon(VisualState.RUNNING).isNull()
+
+
+from aget_state_tray import get_unit_state, systemctl_run, Tray
+
+
+def test_get_unit_state_reads_active_and_sub(qapp):
+    from PyQt6.QtDBus import QDBusConnection, QDBusMessage
+
+    def make_reply(value):
+        r = MagicMock()
+        r.type.return_value = QDBusMessage.MessageType.ReplyMessage
+        r.arguments.return_value = [value]
+        return r
+
+    mock_iface = MagicMock()
+    mock_iface.call.side_effect = [make_reply("active"), make_reply("running")]
+    with patch("aget_state_tray.QDBusInterface", return_value=mock_iface):
+        active, sub = get_unit_state(QDBusConnection.sessionBus())
+    assert (active, sub) == ("active", "running")
+
+
+def test_get_unit_state_dbus_error_returns_empty(qapp):
+    from PyQt6.QtDBus import QDBusConnection, QDBusMessage
+    mock_iface = MagicMock()
+    err = MagicMock()
+    err.type.return_value = QDBusMessage.MessageType.ErrorMessage
+    mock_iface.call.return_value = err
+    with patch("aget_state_tray.QDBusInterface", return_value=mock_iface):
+        assert get_unit_state(QDBusConnection.sessionBus()) == ("", "")
+
+
+def test_systemctl_run_invokes_no_block():
+    with patch("aget_state_tray.subprocess.run") as run:
+        run.return_value = MagicMock(returncode=0, stderr="")
+        systemctl_run("stop")
+    run.assert_called_once_with(
+        ["systemctl", "--user", "--no-block", "stop", "llama-server.service"],
+        capture_output=True, text=True, timeout=5,
+    )
+
+
+def _make_tray(qapp):
+    with patch("aget_state_tray.get_unit_state", return_value=("inactive", "dead")), \
+         patch.object(Tray, "_subscribe"), \
+         patch("aget_state_tray.QDBusConnection"):
+        return Tray()
+
+
+def test_tray_running_starts_timer(qapp):
+    tray = _make_tray(qapp)
+    with patch("aget_state_tray.read_vram", return_value=(14.3, 15.9)), \
+         patch("aget_state_tray.Tray._current_display_name", return_value="m"):
+        tray._apply_state(VisualState.RUNNING)
+    assert tray.vram_timer.isActive()
+    tray.app.quit()
+
+
+def test_tray_stopped_stops_timer(qapp):
+    tray = _make_tray(qapp)
+    tray._apply_state(VisualState.STOPPED)
+    assert not tray.vram_timer.isActive()
+    tray.app.quit()
+
+
+def test_tray_click_running_issues_stop(qapp):
+    from PyQt6.QtWidgets import QSystemTrayIcon
+    tray = _make_tray(qapp)
+    with patch("aget_state_tray.get_unit_state", return_value=("active", "running")), \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._on_activated(QSystemTrayIcon.ActivationReason.Trigger)
+    run.assert_called_once_with("stop")
+    tray.app.quit()
+
+
+def test_tray_click_transition_ignored(qapp):
+    from PyQt6.QtWidgets import QSystemTrayIcon
+    tray = _make_tray(qapp)
+    with patch("aget_state_tray.get_unit_state", return_value=("activating", "start")), \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._on_activated(QSystemTrayIcon.ActivationReason.Trigger)
+    run.assert_not_called()
+    tray.app.quit()

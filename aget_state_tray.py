@@ -223,3 +223,153 @@ def make_icon(state: VisualState, top: str = "", bottom: str = "") -> QIcon:
             painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, top or bottom)
     painter.end()
     return QIcon(pixmap)
+
+
+_STATE_GLYPH = {
+    VisualState.STOPPED: "",
+    VisualState.TRANSITION: "…",
+    VisualState.FAILED: "!",
+}
+_STATE_TOOLTIP = {
+    VisualState.STOPPED: "llama-server · stopped — click to start",
+    VisualState.TRANSITION: "llama-server · changing state…",
+    VisualState.FAILED: "llama-server · failed — click to retry/stop",
+}
+
+
+def _get_prop(iface: QDBusInterface, name: str) -> str:
+    reply = iface.call("Get", UNIT_IFACE, name)
+    if reply.type() == QDBusMessage.MessageType.ReplyMessage:
+        args = reply.arguments()
+        if args:
+            val = args[0]
+            return str(val.variant()) if hasattr(val, "variant") else str(val)
+    return ""
+
+
+def get_unit_state(bus: QDBusConnection) -> tuple[str, str]:
+    """Read (ActiveState, SubState) of llama-server.service via D-Bus.
+    Returns ('', '') on error, which map_state treats as STOPPED."""
+    iface = QDBusInterface(MANAGER_SERVICE, unit_object_path(UNIT_NAME),
+                           PROPS_IFACE, bus)
+    return _get_prop(iface, "ActiveState"), _get_prop(iface, "SubState")
+
+
+def systemctl_run(verb: str) -> None:
+    """Run `systemctl --user --no-block <verb> llama-server.service`.
+    Non-zero exit or failure to spawn is logged to stderr (journald)."""
+    try:
+        result = subprocess.run(
+            ["systemctl", "--user", "--no-block", verb, UNIT_NAME],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            print(f"aget-state-tray: systemctl {verb} failed: "
+                  f"{result.stderr.strip()}", file=sys.stderr)
+    except (subprocess.SubprocessError, OSError) as exc:
+        print(f"aget-state-tray: systemctl {verb} error: {exc}", file=sys.stderr)
+
+
+def _relative_to(models_dir: Path, model_abs: str) -> str:
+    """POSIX path of model_abs relative to models_dir, or bare filename if
+    it lives elsewhere."""
+    try:
+        return Path(model_abs).relative_to(models_dir).as_posix()
+    except ValueError:
+        return Path(model_abs).name
+
+
+class Tray(QObject):
+    def __init__(self) -> None:
+        super().__init__()
+        self.app = QApplication.instance() or QApplication(sys.argv)
+        self.app.setQuitOnLastWindowClosed(False)
+        self.app.setDesktopFileName("aget-state-tray")
+        self._state = VisualState.STOPPED
+
+        self.tray = QSystemTrayIcon()
+        self.menu = QMenu()
+        self.menu.aboutToShow.connect(self._rebuild_menu)
+        self.tray.setContextMenu(self.menu)
+        self.tray.activated.connect(self._on_activated)
+
+        self.vram_timer = QTimer()
+        self.vram_timer.setInterval(VRAM_POLL_MS)
+        self.vram_timer.timeout.connect(self._update_vram)
+
+        self.bus = QDBusConnection.sessionBus()
+        if not self.bus.isConnected():
+            print("aget-state-tray: session bus not connected", file=sys.stderr)
+        else:
+            self._subscribe()
+
+        active, sub = get_unit_state(self.bus)
+        self._apply_state(map_state(active, sub))
+        self.tray.show()  # after first icon is set — avoids "No Icon set" warning
+
+    def _subscribe(self) -> None:
+        """systemd only emits per-unit PropertiesChanged signals while at least
+        one client holds a Manager.Subscribe() — without this the icon is stale
+        on minimal desktops. Then connect the signal handler."""
+        mgr = QDBusInterface(MANAGER_SERVICE, MANAGER_PATH, MANAGER_IFACE, self.bus)
+        reply = mgr.call("Subscribe")
+        if reply.type() == QDBusMessage.MessageType.ErrorMessage:
+            print(f"aget-state-tray: Subscribe failed: {reply.errorMessage()}",
+                  file=sys.stderr)
+        ok = self.bus.connect(
+            MANAGER_SERVICE, unit_object_path(UNIT_NAME), PROPS_IFACE,
+            "PropertiesChanged", self._on_properties_changed,
+        )
+        if not ok:
+            print("aget-state-tray: failed to connect PropertiesChanged signal",
+                  file=sys.stderr)
+
+    def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.Trigger:
+            active, sub = get_unit_state(self.bus)
+            verb = click_verb(active, sub)
+            if verb:
+                systemctl_run(verb)
+
+    @pyqtSlot("QString", "QVariantMap", "QStringList")
+    def _on_properties_changed(self, *args) -> None:
+        active, sub = get_unit_state(self.bus)
+        self._apply_state(map_state(active, sub))
+
+    def _apply_state(self, state: VisualState) -> None:
+        self._state = state
+        if state == VisualState.RUNNING:
+            self.tray.setToolTip("llama-server · reading VRAM…")
+            self._update_vram()
+            self.vram_timer.start()
+        else:
+            self.vram_timer.stop()
+            self.tray.setIcon(make_icon(state, "AI", _STATE_GLYPH[state]))
+            self.tray.setToolTip(_STATE_TOOLTIP[state])
+
+    def _current_display_name(self) -> str:
+        config = load_config(MODELS_TOML)
+        model_abs = current_model(CURRENT_ENV)
+        if not model_abs:
+            return "no model"
+        rel = _relative_to(config.models_dir, model_abs)
+        return display_name(config, rel)
+
+    def _update_vram(self) -> None:
+        name = self._current_display_name()
+        vram = read_vram()
+        if vram:
+            used, total = vram
+            self.tray.setIcon(make_icon(VisualState.RUNNING, "AI", f"{used:.0f}G"))
+            self.tray.setToolTip(
+                f"llama-server · {name} · {used:.1f} / {total:.1f} GB — click to stop"
+            )
+        else:
+            self.tray.setIcon(make_icon(VisualState.RUNNING, "AI"))
+            self.tray.setToolTip(f"llama-server · {name} · running — click to stop")
+
+    def _rebuild_menu(self) -> None:
+        pass  # implemented in Task 10
+
+    def _select_model(self, rel: str) -> None:
+        pass  # implemented in Task 10
