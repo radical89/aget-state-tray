@@ -186,3 +186,40 @@ def read_vram() -> tuple[float, float] | None:
         return parse_vram(result.stdout)
     except (subprocess.SubprocessError, OSError):
         return None
+
+
+STATE_COLOR = {
+    VisualState.RUNNING: QColor("#4CAF50"),
+    VisualState.STOPPED: QColor("#888888"),
+    VisualState.TRANSITION: QColor("#FF9800"),
+    VisualState.FAILED: QColor("#F44336"),
+}
+
+
+def make_icon(state: VisualState, top: str = "", bottom: str = "") -> QIcon:
+    """Draw a 64x64 rounded-rect icon coloured per state, with up to two
+    centred white text lines. Rendered large so HiDPI hosts downscale cleanly."""
+    pixmap = QPixmap(ICON_SIZE, ICON_SIZE)
+    pixmap.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    painter.setBrush(STATE_COLOR[state])
+    painter.setPen(QColor(0, 0, 0, 60))
+    painter.drawRoundedRect(2, 2, ICON_SIZE - 4, ICON_SIZE - 4, 12, 12)
+    if top or bottom:
+        painter.setPen(QColor("white"))
+        font = QFont()
+        font.setBold(True)
+        if top and bottom:
+            font.setPixelSize(20)
+            painter.setFont(font)
+            painter.drawText(QRect(0, 6, ICON_SIZE, 28),
+                             Qt.AlignmentFlag.AlignHCenter, top)
+            painter.drawText(QRect(0, 32, ICON_SIZE, 28),
+                             Qt.AlignmentFlag.AlignHCenter, bottom)
+        else:
+            font.setPixelSize(28)
+            painter.setFont(font)
+            painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, top or bottom)
+    painter.end()
+    return QIcon(pixmap)

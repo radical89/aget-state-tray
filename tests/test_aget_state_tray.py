@@ -189,3 +189,28 @@ def test_read_vram_timeout_returns_none():
     with patch("aget_state_tray.subprocess.run",
                side_effect=subprocess.TimeoutExpired("nvidia-smi", 2)):
         assert read_vram() is None
+
+
+from PyQt6.QtGui import QIcon
+from PyQt6.QtWidgets import QApplication
+from aget_state_tray import make_icon
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication(sys.argv)
+
+
+@pytest.mark.parametrize("state", list(VisualState))
+def test_make_icon_each_state_non_null(qapp, state):
+    icon = make_icon(state, "AI", "!")
+    assert isinstance(icon, QIcon)
+    assert not icon.isNull()
+
+
+def test_make_icon_single_line(qapp):
+    assert not make_icon(VisualState.STOPPED, "AI").isNull()
+
+
+def test_make_icon_no_label(qapp):
+    assert not make_icon(VisualState.RUNNING).isNull()
