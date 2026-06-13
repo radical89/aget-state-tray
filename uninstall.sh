@@ -5,7 +5,8 @@ systemctl --user disable --now aget-state-tray.service 2>/dev/null || true
 
 rm -f "$HOME/.local/bin/aget-state-tray"
 rm -f "$HOME/.config/systemd/user/aget-state-tray.service"
+rm -f "$HOME/.local/share/applications/aget-state-tray.desktop"
 
 systemctl --user daemon-reload
 
-echo "Uninstalled."
+echo "Uninstalled the tray. Left untouched: llama-server.service and ~/.config/llama-server/."

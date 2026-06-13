@@ -1,12 +1,12 @@
 [Unit]
 Description=AI inference server state tray indicator
 After=graphical-session.target
+PartOf=graphical-session.target
 
 [Service]
-Type=simple
 ExecStart=%h/.local/bin/aget-state-tray
 Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

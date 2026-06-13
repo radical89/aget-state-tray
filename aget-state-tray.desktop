@@ -1,0 +1,10 @@
+# %h is an install-time placeholder for $HOME; install.sh substitutes the real
+# absolute path. %h is a systemd specifier, not a valid Desktop Entry field code,
+# so it must not survive into the installed file.
+[Desktop Entry]
+Type=Application
+Name=aget-state-tray
+Comment=llama-server state tray indicator
+Exec=%h/.local/bin/aget-state-tray
+Terminal=false
+NoDisplay=true
