@@ -238,6 +238,8 @@ _STATE_TOOLTIP = {
 
 
 def _get_prop(iface: QDBusInterface, name: str) -> str:
+    """Read one unit property via D-Bus Properties.Get, unwrapping the QDBusVariant.
+    Returns '' on any error reply (callers treat that as STOPPED)."""
     reply = iface.call("Get", UNIT_IFACE, name)
     if reply.type() == QDBusMessage.MessageType.ReplyMessage:
         args = reply.arguments()
@@ -347,13 +349,16 @@ class Tray(QObject):
             self.tray.setIcon(make_icon(state, "AI", _STATE_GLYPH[state]))
             self.tray.setToolTip(_STATE_TOOLTIP[state])
 
-    def _current_display_name(self) -> str:
-        config = load_config(MODELS_TOML)
+    def _display_name_for(self, config: Config) -> str:
         model_abs = current_model(CURRENT_ENV)
         if not model_abs:
             return "no model"
         rel = _relative_to(config.models_dir, model_abs)
         return display_name(config, rel)
+
+    def _current_display_name(self) -> str:
+        # Used by the 5s VRAM tooltip refresh, which has no config in hand.
+        return self._display_name_for(load_config(MODELS_TOML))
 
     def _update_vram(self) -> None:
         name = self._current_display_name()
@@ -371,8 +376,8 @@ class Tray(QObject):
     def _menu_title(self, config: Config, active: str, sub: str) -> str:
         state = map_state(active, sub)
         if state != VisualState.RUNNING:
-            return _STATE_TOOLTIP.get(state, "llama-server")
-        name = self._current_display_name()
+            return _STATE_TOOLTIP[state]
+        name = self._display_name_for(config)
         vram = read_vram()
         if vram:
             used, total = vram
@@ -405,7 +410,7 @@ class Tray(QObject):
             empty.setEnabled(False)
         self.menu.addSeparator()
 
-        if click_verb(active, sub) == "stop" or map_state(active, sub) == VisualState.RUNNING:
+        if map_state(active, sub) == VisualState.RUNNING:
             self.menu.addAction("Stop server", lambda: systemctl_run("stop"))
         else:
             self.menu.addAction("Start server", lambda: systemctl_run("start"))

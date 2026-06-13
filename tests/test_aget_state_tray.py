@@ -364,3 +364,42 @@ def test_select_model_stopped_writes_env_no_restart(qapp, tmp_path):
         tray._select_model("m.gguf")
     run.assert_not_called()
     tray.app.quit()
+
+
+def test_select_model_auto_restart_restarts(qapp, tmp_path):
+    # A crash-looping unit (activating/auto-restart -> FAILED) must restart so
+    # the new model is picked up instead of the old crash command.
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path)
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("activating", "auto-restart")), \
+         patch("aget_state_tray.write_env"), \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._select_model("m.gguf")
+    run.assert_called_once_with("restart")
+    tray.app.quit()
+
+
+def test_select_model_clean_failed_no_restart(qapp, tmp_path):
+    # A cleanly failed unit is not running; just stage the new model, no restart.
+    tray = _make_tray(qapp)
+    cfg = Config(models_dir=tmp_path)
+    with patch("aget_state_tray.load_config", return_value=cfg), \
+         patch("aget_state_tray.get_unit_state", return_value=("failed", "failed")), \
+         patch("aget_state_tray.write_env"), \
+         patch("aget_state_tray.systemctl_run") as run:
+        tray._select_model("m.gguf")
+    run.assert_not_called()
+    tray.app.quit()
+
+
+def test_on_properties_changed_updates_state(qapp):
+    # The @pyqtSlot signature is the most brittle Qt detail; exercise the slot
+    # directly and confirm it re-reads state and applies it.
+    tray = _make_tray(qapp)
+    with patch("aget_state_tray.get_unit_state", return_value=("active", "running")), \
+         patch("aget_state_tray.read_vram", return_value=None), \
+         patch("aget_state_tray.Tray._current_display_name", return_value="m"):
+        tray._on_properties_changed("", {}, [])
+    assert tray._state == VisualState.RUNNING
+    tray.app.quit()
