@@ -41,3 +41,17 @@ def unit_object_path(unit_name: str) -> str:
     Each non-alphanumeric char becomes _<2-digit-lowercase-hex>."""
     escaped = "".join(c if c.isalnum() else f"_{ord(c):02x}" for c in unit_name)
     return f"/org/freedesktop/systemd1/unit/{escaped}"
+
+
+def map_state(active: str, sub: str) -> VisualState:
+    """Collapse systemd (ActiveState, SubState) into a visual state.
+    'activating' with SubState 'auto-restart' is a crash loop, shown as FAILED."""
+    if active == "active":
+        return VisualState.RUNNING
+    if active == "failed":
+        return VisualState.FAILED
+    if active == "activating" and sub == "auto-restart":
+        return VisualState.FAILED
+    if active in ("activating", "deactivating", "reloading"):
+        return VisualState.TRANSITION
+    return VisualState.STOPPED
