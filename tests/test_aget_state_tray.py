@@ -29,3 +29,18 @@ from aget_state_tray import map_state, VisualState
 ])
 def test_map_state(active, sub, expected):
     assert map_state(active, sub) == expected
+
+
+from aget_state_tray import click_verb
+
+
+@pytest.mark.parametrize("active,sub,expected", [
+    ("active", "running", "stop"),
+    ("inactive", "dead", "start"),
+    ("activating", "start", None),         # transition: ignore clicks
+    ("deactivating", "stop", None),
+    ("activating", "auto-restart", "stop"),  # crash loop: kill it
+    ("failed", "failed", "start"),           # clean failure: retry
+])
+def test_click_verb(active, sub, expected):
+    assert click_verb(active, sub) == expected

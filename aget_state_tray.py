@@ -55,3 +55,17 @@ def map_state(active: str, sub: str) -> VisualState:
     if active in ("activating", "deactivating", "reloading"):
         return VisualState.TRANSITION
     return VisualState.STOPPED
+
+
+def click_verb(active: str, sub: str) -> str | None:
+    """The systemctl verb a left-click should run, or None to ignore the click.
+    Takes raw (active, sub) because FAILED splits on SubState: a crash loop
+    (auto-restart) is stopped, a clean failure is (re)started."""
+    state = map_state(active, sub)
+    if state == VisualState.RUNNING:
+        return "stop"
+    if state == VisualState.STOPPED:
+        return "start"
+    if state == VisualState.TRANSITION:
+        return None
+    return "stop" if sub == "auto-restart" else "start"
