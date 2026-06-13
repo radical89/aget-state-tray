@@ -1,0 +1,14 @@
+models_dir = "~/models"
+
+[defaults]
+args = "--n-gpu-layers 99 --ctx-size 16384 --cache-type-k q8_0 --cache-type-v q8_0 --host 0.0.0.0 --port 8080 --parallel 1"
+
+[models."qwen3.6-27b-mtp/Qwen3.6-27B-IQ3_M-mtp.gguf"]
+args = "--spec-type draft-mtp --spec-draft-n-max 5"
+
+[models."qwopus-9b-mtp/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf"]
+args = "--spec-type draft-mtp --spec-draft-n-max 5"
+
+[models."gemma-4-12b/gemma-4-12b-it-UD-Q4_K_XL.gguf"]
+args = "--mmproj /home/karlos/models/gemma-4-12b/mmproj-BF16.gguf"
+name = "Gemma 4 12B (vision)"
