@@ -82,3 +82,44 @@ def discover_models(models_dir: Path) -> list[str]:
         if not p.name.startswith("mmproj")
     ]
     return sorted(found)
+
+
+@dataclass
+class Config:
+    models_dir: Path
+    default_args: str = ""
+    model_args: dict[str, str] = field(default_factory=dict)
+    model_names: dict[str, str] = field(default_factory=dict)
+
+
+def load_config(path: Path) -> Config:
+    """Parse models.toml. On any read/parse error, log and return a Config
+    pointing at ~/models with empty defaults (the app stays usable)."""
+    fallback = Config(models_dir=Path(os.path.expanduser("~/models")))
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        print(f"aget-state-tray: cannot read {path}: {exc}", file=sys.stderr)
+        return fallback
+    models_dir = Path(os.path.expanduser(data.get("models_dir", "~/models")))
+    default_args = data.get("defaults", {}).get("args", "")
+    model_args: dict[str, str] = {}
+    model_names: dict[str, str] = {}
+    for rel, entry in data.get("models", {}).items():
+        if isinstance(entry, dict):
+            if "args" in entry:
+                model_args[rel] = entry["args"]
+            if "name" in entry:
+                model_names[rel] = entry["name"]
+    return Config(models_dir, default_args, model_args, model_names)
+
+
+def compose_args(config: Config, rel_path: str) -> str:
+    """Full llama-server arg string: defaults followed by per-model extras."""
+    extra = config.model_args.get(rel_path, "")
+    return f"{config.default_args} {extra}".strip()
+
+
+def display_name(config: Config, rel_path: str) -> str:
+    """Menu label: explicit name override, else filename without .gguf."""
+    return config.model_names.get(rel_path) or Path(rel_path).name.removesuffix(".gguf")
