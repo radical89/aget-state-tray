@@ -123,3 +123,37 @@ def compose_args(config: Config, rel_path: str) -> str:
 def display_name(config: Config, rel_path: str) -> str:
     """Menu label: explicit name override, else filename without .gguf."""
     return config.model_names.get(rel_path) or Path(rel_path).name.removesuffix(".gguf")
+
+
+def render_env(model_abs: str, args: str) -> str:
+    """Render the EnvironmentFile systemd reads at service start."""
+    return f"LLAMA_MODEL={model_abs}\nLLAMA_ARGS={args}\n"
+
+
+def parse_env(text: str) -> tuple[str, str]:
+    """Extract (model, args) from a current.env body. Missing keys -> ''."""
+    model = ""
+    args = ""
+    for line in text.splitlines():
+        if line.startswith("LLAMA_MODEL="):
+            model = line[len("LLAMA_MODEL="):]
+        elif line.startswith("LLAMA_ARGS="):
+            args = line[len("LLAMA_ARGS="):]
+    return model, args
+
+
+def write_env(path: Path, model_abs: str, args: str) -> None:
+    """Atomically write current.env (temp file + rename), creating parents."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(render_env(model_abs, args))
+    tmp.replace(path)
+
+
+def current_model(path: Path) -> str:
+    """The currently selected absolute model path, or '' if unreadable."""
+    try:
+        model, _ = parse_env(path.read_text())
+        return model
+    except OSError:
+        return ""

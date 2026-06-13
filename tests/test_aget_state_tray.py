@@ -130,3 +130,30 @@ def test_display_name_override_and_fallback(tmp_path):
     cfg = load_config(f)
     assert display_name(cfg, "gem/g.gguf") == "Gemma (vision)"
     assert display_name(cfg, "qwen/q.gguf") == "q"
+
+
+from aget_state_tray import render_env, parse_env, write_env, current_model
+
+
+def test_env_round_trip():
+    text = render_env("/m/model.gguf", "--ctx-size 16384 --port 8080")
+    model, args = parse_env(text)
+    assert model == "/m/model.gguf"
+    assert args == "--ctx-size 16384 --port 8080"
+
+
+def test_parse_env_ignores_blank_and_unknown_lines():
+    model, args = parse_env("# comment\nLLAMA_MODEL=/x.gguf\n\nFOO=bar\nLLAMA_ARGS=--a\n")
+    assert model == "/x.gguf"
+    assert args == "--a"
+
+
+def test_write_env_creates_dir_and_file(tmp_path):
+    target = tmp_path / "sub" / "current.env"
+    write_env(target, "/m/x.gguf", "--port 8080")
+    assert target.exists()
+    assert current_model(target) == "/m/x.gguf"
+
+
+def test_current_model_missing_file_returns_empty(tmp_path):
+    assert current_model(tmp_path / "absent.env") == ""
