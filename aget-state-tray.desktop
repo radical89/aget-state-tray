@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=aget-state-tray
+Comment=llama-server state tray indicator
+Exec=%h/.local/bin/aget-state-tray
+Terminal=false
+NoDisplay=true
