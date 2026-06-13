@@ -69,3 +69,16 @@ def click_verb(active: str, sub: str) -> str | None:
     if state == VisualState.TRANSITION:
         return None
     return "stop" if sub == "auto-restart" else "start"
+
+
+def discover_models(models_dir: Path) -> list[str]:
+    """Return sorted POSIX-relative paths of *.gguf files under models_dir,
+    excluding multimodal projector files (mmproj*). Missing dir -> []."""
+    if not models_dir.is_dir():
+        return []
+    found = [
+        p.relative_to(models_dir).as_posix()
+        for p in models_dir.rglob("*.gguf")
+        if not p.name.startswith("mmproj")
+    ]
+    return sorted(found)
