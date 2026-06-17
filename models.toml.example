@@ -9,8 +9,11 @@ args = "--spec-type draft-mtp --spec-draft-n-max 5"
 [models."qwopus-9b-mtp/Qwopus3.5-9B-Coder-MTP-Q4_K_M.gguf"]
 args = "--spec-type draft-mtp --spec-draft-n-max 5"
 
-# Per-model args are passed to llama-server verbatim with no shell, so paths here
-# must be absolute: ~ and $HOME are not expanded. Edit this path for your machine.
+# Per-model args are passed to llama-server verbatim with no shell, so any path
+# here must be absolute: ~ and $HOME are not expanded.
+# Vision (--mmproj) is omitted by default: the gemma "gemma4uv" projector is newer
+# than some llama.cpp builds and fails with "unknown projector type". If your build
+# supports it, add (with an absolute path):
+#   args = "--mmproj /home/youruser/models/gemma-4-12b/mmproj-BF16.gguf"
 [models."gemma-4-12b/gemma-4-12b-it-UD-Q4_K_XL.gguf"]
-args = "--mmproj /home/karlos/models/gemma-4-12b/mmproj-BF16.gguf"
-name = "Gemma 4 12B (vision)"
+name = "Gemma 4 12B"
